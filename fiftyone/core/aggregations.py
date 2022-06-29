@@ -57,6 +57,25 @@ class Aggregation(object):
         self._expr = expr
         self._safe = safe
 
+    def __eq__(self, other):
+        return (
+            isinstance(other, self.__class__)
+            and self._kwargs() == other._kwargs()
+        )
+
+    def _kwargs(self):
+        """Returns a list of ``[name, value]`` lists describing the parameters
+        of this stage instance.
+
+        Returns:
+            a list of ``[name, value]`` lists
+        """
+        return [
+            ["field_or_expr", self._field_name or self._expr],
+            ["expr", self._expr if self._field_name is not None else None],
+            ["safe", self._safe],
+        ]
+
     @property
     def field_name(self):
         """The name of the field being computed on, if any."""
@@ -157,11 +176,35 @@ class Aggregation(object):
 
         return False
 
+    def _serialize(self):
+        """Returns a JSON dict representation of the :class:`ViewStage`.
+
+        Args:
+            include_uuid (True): whether to include the stage's UUID in the JSON
+                representation
+
+        Returns:
+            a JSON dict
+        """
+        return {"_cls": etau.get_class_name(self), "kwargs": self._kwargs()}
+
+    @classmethod
+    def _from_dict(cls, data):
+        """Creates a :class:`ViewStage` instance from a serialized JSON dict
+        representation of it.
+
+        Args:
+            d: a JSON dict
+
+        Returns:
+            a :class:`ViewStage`
+        """
+        implementing_cls = etau.get_class(data["_cls"])
+        return implementing_cls(**dict(data["kwargs"]))
+
 
 class AggregationError(Exception):
     """An error raised during the execution of an :class:`Aggregation`."""
-
-    pass
 
 
 class Bounds(Aggregation):
@@ -246,6 +289,11 @@ class Bounds(Aggregation):
         super().__init__(field_or_expr, expr=expr, safe=safe)
         self._field_type = None
         self._count_nonfinites = _count_nonfinites
+
+    def _kwargs(self):
+        return super()._kwargs() + [
+            ["_count_nonfinites", self._count_nonfinites],
+        ]
 
     def default_result(self):
         """Returns the default result for this aggregation.
@@ -423,6 +471,11 @@ class Count(Aggregation):
         super().__init__(field_or_expr, expr=expr, safe=safe)
         self._unwind = _unwind
 
+    def _kwargs(self):
+        return super()._kwargs() + [
+            ["_unwind", self._unwind],
+        ]
+
     def default_result(self):
         """Returns the default result for this aggregation.
 
@@ -570,6 +623,16 @@ class CountValues(Aggregation):
         self._field_type = None
         self._search = _search
         self._selected = _selected
+
+    def _kwargs(self):
+        return super()._kwargs() + [
+            ["_first", self._first],
+            ["_sort_by", self._sort_by],
+            ["_asc", self._order == 1],
+            ["_include", self._include],
+            ["_search", self._search],
+            ["_selected", self._selected],
+        ]
 
     def default_result(self):
         """Returns the default result for this aggregation.
@@ -943,6 +1006,14 @@ class HistogramValues(Aggregation):
 
         self._parse_args()
 
+    def _kwargs(self):
+        super_kwargs = [tup for tup in super()._kwargs() if tup[0] != "safe"]
+        return super_kwargs + [
+            ["bins", self._bins],
+            ["range", self._range],
+            ["auto", self._auto],
+        ]
+
     def default_result(self):
         """Returns the default result for this aggregation.
 
@@ -1306,6 +1377,9 @@ class Std(Aggregation):
         super().__init__(field_or_expr, expr=expr, safe=safe)
         self._sample = sample
 
+    def _kwargs(self):
+        return super()._kwargs() + [["sample", self._sample]]
+
     def default_result(self):
         """Returns the default result for this aggregation.
 
@@ -1584,6 +1658,16 @@ class Values(Aggregation):
         self._raw = _raw
         self._field_type = None
         self._num_list_fields = None
+
+    def _kwargs(self):
+        super_kwargs = [tup for tup in super()._kwargs() if tup[0] != "safe"]
+        return super_kwargs + [
+            ["missing_value", self._missing_value],
+            ["unwind", self._unwind],
+            ["_allow_missing", self._allow_missing],
+            ["_big_result", self._big_result],
+            ["_raw", self._raw],
+        ]
 
     @property
     def _has_big_result(self):
